@@ -1,0 +1,335 @@
+//<![CDATA[
+
+(function() {
+  'use strict';
+
+  // Previne execução duplicada
+  if (window.__PAGINATION_READY__) {
+    console.warn('⚠️ Paginação já foi inicializada');
+    return;
+  }
+  window.__PAGINATION_READY__ = true;
+
+  const CONFIG = {
+    POSTS_PER_PAGE: 8,
+    MAX_VISIBLE_PAGES: 5,
+    BLOGGER_FEED_URL: '/feeds/posts/default'
+  };
+
+  // Elementos principais
+  const grid = document.getElementById('js-products-grid');
+  const paginationContainer = document.getElementById('js-pagination');
+
+  if (!grid || !paginationContainer) {
+    console.error('❌ Elementos não encontrados:', { grid, paginationContainer });
+    return;
+  }
+
+  let currentPage = 1;
+  let totalPosts = 0;
+  let isLoading = false;
+  
+  function getPageFromUrl() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const page = parseInt(urlParams.get('page')) || 1;
+    return page > 0 ? page : 1;
+  }
+
+  function updateUrl(page) {
+    const url = new URL(window.location.href);
+    if (page === 1) {
+      url.searchParams.delete('page');
+    } else {
+      url.searchParams.set('page', page);
+    }
+    window.history.pushState({ page }, '', url);
+  }
+
+  function showLoading() {
+    grid.innerHTML = `
+      <div class="loading-container" style="grid-column: 1/-1; text-align: center; padding: 80px 20px;">
+        <div class="spinner" style="border: 4px solid #f3f3f3; border-top: 4px solid #d4c5a0; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto;"></div>
+        <p style="margin-top: 20px; color: #666;">A carregar produtos...</p>
+      </div>
+    `;
+  }
+
+  function showError(message) {
+    grid.innerHTML = `
+      <div class="error-container" style="grid-column: 1/-1; text-align: center; padding: 80px 20px;">
+        <p style="color: #d32f2f; font-size: 16px;">⚠️ ${message}</p>
+        <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer;">Tentar novamente</button>
+      </div>
+    `;
+  }
+
+  function fetchBloggerPosts(page) {
+    if (isLoading) {
+      console.log('⏳ Já está a carregar...');
+      return;
+    }
+
+    isLoading = true;
+    currentPage = page;
+    showLoading();
+    paginationContainer.innerHTML = '';
+
+    const startIndex = (page - 1) * CONFIG.POSTS_PER_PAGE + 1;
+    
+    // Remove script anterior se existir
+    const oldScript = document.getElementById('blogger-feed-script');
+    if (oldScript) {
+      oldScript.remove();
+    }
+
+    // Cria callback único para esta requisição
+    const callbackName = 'bloggerCallback_' + Date.now();
+    
+    window[callbackName] = function(data) {
+      try {
+        handleBloggerData(data);
+        delete window[callbackName];
+      } catch (error) {
+        console.error('❌ Erro ao processar dados:', error);
+        showError('Erro ao processar os dados.');
+        isLoading = false;
+      }
+    };
+
+    // Cria novo script para buscar dados
+    const script = document.createElement('script');
+    script.id = 'blogger-feed-script';
+    script.src = `${CONFIG.BLOGGER_FEED_URL}?alt=json-in-script&max-results=${CONFIG.POSTS_PER_PAGE}&start-index=${startIndex}&callback=${callbackName}`;
+    
+    script.onerror = function() {
+      showError('Erro ao conectar ao servidor.');
+      delete window[callbackName];
+      isLoading = false;
+    };
+
+    document.body.appendChild(script);
+  }
+
+
+  function handleBloggerData(data) {
+    console.log('📦 Dados recebidos:', data);
+
+    if (!data || !data.feed) {
+      showError('Dados inválidos recebidos.');
+      isLoading = false;
+      return;
+    }
+
+    const posts = data.feed.entry || [];
+    totalPosts = parseInt(data.feed.openSearch$totalResults.$t) || 0;
+
+    console.log(`📊 Total de posts: ${totalPosts}, Posts nesta página: ${posts.length}`);
+
+    if (posts.length === 0) {
+      grid.innerHTML = `
+        <div style="grid-column: 1/-1; text-align: center; padding: 80px 20px;">
+          <p style="color: #666; font-size: 16px;">Nenhum produto encontrado nesta página.</p>
+        </div>
+      `;
+      isLoading = false;
+      return;
+    }
+
+    grid.innerHTML = '';
+
+    // Renderiza cada post
+    posts.forEach((post, index) => {
+      setTimeout(() => {
+        renderPost(post);
+        
+        if (index === posts.length - 1) {
+          renderPagination();
+          isLoading = false;
+        }
+      }, index * 50); 
+    });
+  }
+
+
+  function renderPost(post) {
+    const title = post.title.$t || 'Sem título';
+    
+    // Busca o link correto
+    const link = post.link.find(l => l.rel === 'alternate');
+    const url = link ? link.href : '#';
+
+    // Busca a imagem
+    let imageUrl = 'https://via.placeholder.com/400x400?text=Sem+Imagem';
+    if (post.media$thumbnail && post.media$thumbnail.url) {
+      imageUrl = post.media$thumbnail.url.replace(/s72-c/, 's400');
+    }
+
+    let badgesHTML = '';
+    if (post.category && post.category.length > 0) {
+      post.category.forEach(cat => {
+        const labelText = cat.term;
+        if (labelText.toLowerCase().startsWith('off/')) {
+          const badgeText = labelText.split('/')[1]; 
+          badgesHTML += `<span class="product-label label-off">${escapeHtml(badgeText)}</span>`;
+        }
+      });
+    }
+
+    if (post.content && post.content.$t) {
+      const content = post.content.$t;
+      const strikeRegex = /<strike[^>]*>off\/([^<]+)<\/strike>/gi;
+      let match;
+      while ((match = strikeRegex.exec(content)) !== null) {
+        const badgeText = match[1].trim();
+        badgesHTML += `<span class="product-label label-off">${escapeHtml(badgeText)}</span>`;
+      }
+    }
+
+    // Se houver badges, cria o wrapper
+    const labelsWrapper = badgesHTML ? `<div class="product-labels">${badgesHTML}</div>` : '';
+
+    // Cria o HTML do produto
+    const productHTML = `
+      <article class="product-card" style="animation: fadeIn 0.3s ease;">
+        <div class="product-image">
+          <img class="product-thumb" src="${imageUrl}" alt="${escapeHtml(title)}" loading="lazy" 
+               onerror="this.src='https://via.placeholder.com/400x400?text=Sem+Imagem'"/>
+          
+          ${labelsWrapper}
+          
+          <button class="btn-wishlist" onclick="addToWishlist(this)" aria-label="Adicionar aos favoritos">
+            <i class="far fa-heart"></i>
+          </button>
+          
+          <div class="product-overlay">
+            <button class="btn-add-cart" data-url="${url}" 
+                    onclick="addToCart(this); openCart();" aria-label="Adicionar ao carrinho">
+              <i class="fas fa-shopping-cart"></i>
+              <span>Adicionar</span>
+            </button>
+          </div>
+        </div>
+        
+        <div class="product-info">
+          <h2 class="product-title allow-copy">
+            <a href="${url}">${escapeHtml(title)}</a>
+          </h2>
+          <div class="product-price" data-price="15.00">€15.00</div>
+        </div>
+      </article>
+    `;
+
+    grid.insertAdjacentHTML('beforeend', productHTML);
+  }
+
+  function renderPagination() {
+    const totalPages = Math.ceil(totalPosts / CONFIG.POSTS_PER_PAGE);
+    
+    console.log(`📄 Renderizando paginação: Página ${currentPage} de ${totalPages}`);
+
+    if (totalPages <= 1) {
+      paginationContainer.innerHTML = '';
+      return;
+    }
+
+    paginationContainer.innerHTML = '';
+
+    const maxVisible = CONFIG.MAX_VISIBLE_PAGES;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+
+    if (end - start < maxVisible - 1) {
+      start = Math.max(1, end - maxVisible + 1);
+    }
+
+    if (currentPage > 1) {
+      createPageButton('‹', currentPage - 1, 'Página anterior');
+    }
+
+    if (start > 1) {
+      createPageButton('1', 1, 'Primeira página');
+      if (start > 2) {
+        paginationContainer.innerHTML += '<span class="pagination-dots">…</span>';
+      }
+    }
+
+    for (let i = start; i <= end; i++) {
+      createPageButton(i.toString(), i, `Página ${i}`, i === currentPage);
+    }
+
+    if (end < totalPages) {
+      if (end < totalPages - 1) {
+        paginationContainer.innerHTML += '<span class="pagination-dots">…</span>';
+      }
+      createPageButton(totalPages.toString(), totalPages, 'Última página');
+    }
+
+    // Botão "Próxima"
+    if (currentPage < totalPages) {
+      createPageButton('›', currentPage + 1, 'Próxima página');
+    }
+  }
+
+
+  function createPageButton(text, pageNum, title, isActive = false) {
+    const button = document.createElement('a');
+    button.href = pageNum === 1 ? window.location.pathname : `?page=${pageNum}`;
+    button.textContent = text;
+    button.title = title;
+    button.className = 'pagination-link' + (isActive ? ' active' : '');
+    
+    if (!isActive) {
+      button.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (!isLoading && pageNum !== currentPage) {
+          goToPage(pageNum);
+        }
+      });
+    }
+
+    paginationContainer.appendChild(button);
+  }
+
+  function goToPage(page) {
+    console.log(`🔄 Navegando para página ${page}`);
+    updateUrl(page);
+    fetchBloggerPosts(page);
+    
+    // Scroll suave para o topo
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  window.addEventListener('popstate', function(event) {
+    const page = getPageFromUrl();
+    console.log('🔙 Navegação do browser: página', page);
+    fetchBloggerPosts(page);
+  });
+
+  function initPagination() {
+    console.log('🚀 Inicializando paginação do Blogger...');
+    
+    currentPage = getPageFromUrl();
+    console.log(`📍 Página inicial: ${currentPage}`);
+    
+    // Carrega os posts
+    fetchBloggerPosts(currentPage);
+  }
+
+  // Aguarda DOMContentLoaded para garantir que funções do carrinho estejam disponíveis
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPagination);
+  } else {
+    initPagination();
+  }
+
+})();
+//]]>
