@@ -3,18 +3,15 @@
 (function() {
     'use strict';
     
-    // --- CONFIGURAÇÕES ---
     const CONFIG = {
         whatsappNumber: "351919225483",
         checkoutPageUrl: "/p/checkout.html",
         cartStorageKey: "vinylCartComplete"
     };
     
-    // --- ESTADO GLOBAL DO CARRINHO ---
     window.cartData = { items: [], total: 0, count: 0 };
     window.wishlist = [];
 
-    // --- FUNÇÕES DO CARRINHO ---
     function loadCart() {
         try {
             const saved = localStorage.getItem(CONFIG.cartStorageKey);
@@ -88,7 +85,6 @@
         if (subtotalEl) subtotalEl.textContent = '€' + window.cartData.total.toFixed(2);
     }
 
-    // --- FUNÇÕES GLOBAIS (ACESSÍVEIS PELO HTML) ---
     window.addToCart = function(button) {
         const card = button.closest('.product-card');
         if (!card) return;
@@ -173,7 +169,6 @@
         document.getElementById('cartOverlay')?.classList.toggle('active');
     };
 
-    // ========== FUNÇÃO PARA ABRIR O CARRINHO AUTOMATICAMENTE ==========
     window.openCart = function() {
         const cartSidebar = document.getElementById('cartSidebar');
         const cartOverlay = document.getElementById('cartOverlay');
@@ -186,7 +181,6 @@
         }
     };
 
-    // ========== FUNÇÃO PARA FECHAR O CARRINHO ==========
     window.closeCart = function() {
         const cartSidebar = document.getElementById('cartSidebar');
         const cartOverlay = document.getElementById('cartOverlay');
@@ -204,12 +198,7 @@
         window.location.href = CONFIG.checkoutPageUrl;
     };
 
-    // =================================================================
-    // NOVA FUNÇÃO PARA O BOTÃO "FINALIZAR"
-    // =================================================================
-    /**
-     * Adiciona o item atual ao carrinho (se não estiver) e redireciona para o checkout.
-     */
+    
     window.buyNowAndCheckout = function() {
         // Reutiliza a lógica de addToCartSingle para garantir que o item está no carrinho
         const success = window.addToCartSingle(document.getElementById('addToCartBtn'));
@@ -222,9 +211,7 @@
         }
     };
 
-    // =================================================================
-    // FUNÇÕES DE WHATSAPP CORRIGIDAS
-    // =================================================================
+
     window.checkoutWhatsApp = function() {
         if (window.cartData.items.length === 0) return alert('Seu carrinho está vazio!');
         let msg = '🎵 Olá! Gostaria de encomendar os seguintes discos:\n\n';
@@ -252,11 +239,7 @@
         window.open(whatsappUrl, '_blank');
     };
 
-    // =================================================================
-    // SISTEMA DE FAVORITOS (WISHLIST) - VERSÃO PROTEGIDA CONTRA ERROS
-    // =================================================================
-    
-    // --- CARREGAR FAVORITOS DO LOCALSTORAGE ---
+
     function loadWishlist() {
         try {
             const saved = localStorage.getItem('vinylWishlist');
@@ -269,7 +252,6 @@
         }
     }
 
-    // --- SALVAR FAVORITOS NO LOCALSTORAGE ---
     function saveWishlist() {
         try {
             localStorage.setItem('vinylWishlist', JSON.stringify(window.wishlist));
@@ -278,14 +260,11 @@
         }
     }
 
-    // --- FORMATAR PREÇO COM PROTEÇÃO ---
     function formatPrice(price) {
-        // Proteção: Garante que sempre retorna um número formatado
         const numPrice = parseFloat(price);
         return isNaN(numPrice) ? '0.00' : numPrice.toFixed(2);
     }
 
-    // --- ATUALIZAR CONTADOR DE WISHLIST ---
     function updateWishlistCount() {
         const countEl = document.getElementById('wishlistCount');
         if (countEl) {
@@ -294,7 +273,6 @@
         }
     }
 
-    // --- ATUALIZAR UI DA WISHLIST (COM PROTEÇÃO) ---
     window.updateWishlistUI = function() {
         const itemsDiv = document.getElementById('wishlistItems');
         const footer = document.getElementById('wishlistFooter');
@@ -323,13 +301,12 @@
 
         window.wishlist.forEach(function(item, index) {
 
-            // Proteção: Garante que todos os campos existem
 
             const title = item.title || 'Produto sem nome';
 
             const artist = item.artist || 'Artista';
 
-            const price = formatPrice(item.price); // USA A FUNÇÃO PROTEGIDA
+            const price = formatPrice(item.price); 
             const image = item.image || 'https://via.placeholder.com/80x80/e74c3c/ffffff?text=♥';
             const url = item.url || '#';
             
@@ -357,34 +334,27 @@
         itemsDiv.innerHTML = html;
     };
 
-    // --- ADICIONAR AOS FAVORITOS (GRID) ---
     window.addToWishlist = function(button) {
         const card = button.closest('.product-card');
         if (!card) return;
 
-        // PROTEÇÃO: Tenta encontrar o título de DUAS formas diferentes
         const titleEl = card.querySelector('.product-title a') || card.querySelector('.product-title');
         const priceEl = card.querySelector('.product-price');
         
         if (!titleEl || !priceEl) return;
 
         const fullTitle = titleEl.textContent.trim();
-        // PROTEÇÃO: Garante que o preço é sempre um número
         const price = parseFloat(priceEl.getAttribute('data-price')) || 0;
         const image = card.querySelector('.product-thumb')?.src || '';
         const url = titleEl.href || window.location.href;
         const id = fullTitle.replace(/\s+/g, '-').toLowerCase();
-
-        // Verificar se já existe
         const index = window.wishlist.findIndex(item => item.id === id);
         
         if (index > -1) {
-            // Remove se já existe
             window.wishlist.splice(index, 1);
             button.classList.remove('active');
             button.innerHTML = '<i class="far fa-heart"></i>';
         } else {
-            // Extrair artista do título (se tiver " - ")
             let title = fullTitle;
             let artist = 'Artista';
             
@@ -394,7 +364,6 @@
                 title = parts.slice(1).join(' - ').trim();
             }
 
-            // Adicionar novo favorito
             window.wishlist.push({
                 id: id,
                 title: title,
@@ -404,7 +373,6 @@
                 url: url
             });
 
-            // Feedback visual
             button.classList.add('active');
             button.innerHTML = '<i class="fas fa-heart"></i>';
         }
@@ -412,7 +380,6 @@
         saveWishlist();
         window.updateWishlistUI();
         
-        // Abrir sidebar automaticamente
         const sidebar = document.getElementById('wishlistSidebar');
         const overlay = document.getElementById('wishlistOverlay');
         if (sidebar && overlay) {
@@ -422,7 +389,6 @@
         }
     };
 
-    // --- ADICIONAR AOS FAVORITOS (PÁGINA INDIVIDUAL) ---
     window.addToWishlistSingle = function(button) {
         const container = button.closest('.product-single-container') || 
                          document.querySelector('.product-single-container');
@@ -435,13 +401,10 @@
         if (!titleEl || !priceEl) return;
 
         const fullTitle = titleEl.textContent.trim().replace(/\s+/g, ' ');
-        // PROTEÇÃO: Garante que o preço é sempre um número
         const price = parseFloat(priceEl.getAttribute('data-price')) || 0;
         const image = imageEl ? imageEl.src : '';
         const url = window.location.href;
         const id = fullTitle.replace(/\s+/g, '-').toLowerCase();
-
-        // Verificar se já existe
         const index = window.wishlist.findIndex(item => item.id === id);
         
         if (index > -1) {
@@ -449,7 +412,6 @@
             button.classList.remove('active');
             button.innerHTML = '<i class="far fa-heart"></i>';
         } else {
-            // Extrair artista do título (se tiver " - ")
             let title = fullTitle;
             let artist = 'Artista';
             
@@ -459,7 +421,6 @@
                 title = parts.slice(1).join(' - ').trim();
             }
 
-            // Adicionar novo favorito
             window.wishlist.push({
                 id: id,
                 title: title,
@@ -476,7 +437,6 @@
         saveWishlist();
         window.updateWishlistUI();
         
-        // Abrir sidebar automaticamente
         const sidebar = document.getElementById('wishlistSidebar');
         const overlay = document.getElementById('wishlistOverlay');
         if (sidebar && overlay) {
@@ -486,7 +446,6 @@
         }
     };
 
-    // --- REMOVER DA WISHLIST ---
     window.removeFromWishlist = function(index) {
         if (index >= 0 && index < window.wishlist.length) {
             window.wishlist.splice(index, 1);
@@ -496,7 +455,6 @@
         }
     };
 
-    // --- TOGGLE WISHLIST SIDEBAR ---
     window.toggleWishlistSidebar = function() {
         const sidebar = document.getElementById('wishlistSidebar');
         const overlay = document.getElementById('wishlistOverlay');
@@ -506,12 +464,10 @@
             overlay.classList.toggle('active');
             document.body.style.overflow = sidebar.classList.contains('active') ? 'hidden' : '';
             
-            // Atualizar UI dos favoritos
             window.updateWishlistUI();
         }
     };
 
-    // --- FECHAR SIDEBAR DE FAVORITOS ---
     window.closeWishlist = function() {
         const sidebar = document.getElementById('wishlistSidebar');
         const overlay = document.getElementById('wishlistOverlay');
@@ -523,19 +479,15 @@
         }
     };
 
-   // --- VER TODOS OS FAVORITOS (PÁGINA DEDICADA) ---
 window.viewAllWishlist = function() {
-    // 1. Fecha o menu lateral da Wishlist para não ficar aberto por cima da nova página
     if (typeof toggleWishlistSidebar === 'function') {
         toggleWishlistSidebar();
     }
     
-    // 2. Redireciona o cliente para a página de favoritos
-    // Certifique-se de que criou a página no Blogger com este link exato
+   
     window.location.href = '/p/favoritos.html';
 };
 
-    // --- INICIALIZAÇÃO ---
     function init() {
         loadCart();
         loadWishlist();
@@ -543,7 +495,7 @@ window.viewAllWishlist = function() {
         window.updateWishlistUI();
         syncWithSimpleCart();
         
-        // Event listeners para fechar sidebars ao clicar no overlay
+       
         const cartOverlay = document.getElementById('cartOverlay');
         const wishlistOverlay = document.getElementById('wishlistOverlay');
         
@@ -555,7 +507,6 @@ window.viewAllWishlist = function() {
             wishlistOverlay.addEventListener('click', closeWishlist);
         }
         
-        // Event listener para ESC key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeCart();
@@ -563,13 +514,11 @@ window.viewAllWishlist = function() {
             }
         });
         
-        // Marcar botões de favoritos já adicionados
         updateWishlistButtons();
         
         console.log('✅ Sistema inicializado - Carrinho e Favoritos com auto-abertura');
     }
 
-    // --- ATUALIZAR BOTÕES DE FAVORITOS NA PÁGINA ---
     function updateWishlistButtons() {
         document.querySelectorAll('.btn-wishlist, .product-wishlist-btn').forEach(btn => {
             const card = btn.closest('.product-card');
