@@ -1,0 +1,259 @@
+(function() {
+    'use strict';
+    
+    const CONFIG = {
+        whatsappNumber: "351919225483",
+        checkoutPageUrl: "/p/checkout.html",
+        cartStorageKey: "vinylCartComplete"
+    };
+    
+    window.cartData = { items: [], total: 0, count: 0 };
+
+    function loadCart() {
+        try {
+            const saved = localStorage.getItem(CONFIG.cartStorageKey);
+            if (saved) {
+                window.cartData = JSON.parse(saved);
+            }
+        } catch (e) {}
+    }
+
+    function saveCart() {
+        try {
+            localStorage.setItem(CONFIG.cartStorageKey, JSON.stringify(window.cartData));
+            syncWithSimpleCart();
+        } catch (e) {}
+    }
+
+    function syncWithSimpleCart() {
+        if (typeof simpleCart === 'undefined') return;
+        simpleCart.empty();
+        window.cartData.items.forEach(function(item) {
+            simpleCart.add({ name: item.title, price: item.price, quantity: item.quantity, thumb: item.image, url: item.url });
+        });
+    }
+
+    function updateCartTotals() {
+        window.cartData.count = 0;
+        window.cartData.total = 0;
+        window.cartData.items.forEach(function(item) {
+            window.cartData.count += item.quantity;
+            window.cartData.total += item.price * item.quantity;
+        });
+    }
+
+    function updateCartUI() {
+        const countEl = document.getElementById('cartCount');
+        const itemsEl = document.getElementById('cartItems');
+        const footerEl = document.getElementById('cartFooter');
+        const subtotalEl = document.getElementById('cartSubtotal');
+
+        if (countEl) {
+            countEl.textContent = window.cartData.count;
+            countEl.style.display = window.cartData.count > 0 ? 'flex' : 'none';
+        }
+
+        if (window.cartData.items.length === 0) {
+            if (footerEl) footerEl.style.display = 'none';
+            if (itemsEl) itemsEl.innerHTML = '<div class="cart-empty"><i class="fas fa-shopping-cart"></i><p>Seu carrinho está vazio</p></div>';
+            return;
+        }
+
+        if (footerEl) footerEl.style.display = 'block';
+        let itemsHtml = '';
+        window.cartData.items.forEach(function(item) {
+            itemsHtml += '<div class="cart-item">' +
+                '<div class="cart-item-image"><img src="' + item.image + '" alt="' + item.title + '" loading="lazy" onerror="this.src=\'https://via.placeholder.com/80x80/d4af37/1a1a1a?text=Vinil\'"></div>' +
+                '<div class="cart-item-details">' +
+                '<div class="cart-item-title">' + item.title + '</div>' +
+                '<div class="cart-item-artist">' + item.artist + '</div>' +
+                '<div class="cart-item-price">€' + item.price.toFixed(2) + '</div>' +
+                '<div class="cart-item-quantity">' +
+                '<button onclick="updateQuantity(' + item.id + ', -1)" class="qty-btn">−</button>' +
+                '<span>' + item.quantity + '</span>' +
+                '<button onclick="updateQuantity(' + item.id + ', 1)" class="qty-btn">+</button>' +
+                '</div>' +
+                '</div>' +
+                '<button class="cart-item-remove" onclick="removeFromCart(' + item.id + ')"><i class="fas fa-trash"></i></button>' +
+                '</div>';
+        });
+        if (itemsEl) itemsEl.innerHTML = itemsHtml;
+        if (subtotalEl) subtotalEl.textContent = '€' + window.cartData.total.toFixed(2);
+    }
+
+    window.addToCart = function(button) {
+        const card = button.closest('.product-card');
+        if (!card) return;
+        const titleEl = card.querySelector('.product-title');
+        const priceEl = card.querySelector('.product-price');
+        if (!titleEl || !priceEl) return;
+
+        const title = titleEl.textContent.trim();
+        const price = parseFloat(priceEl.getAttribute('data-price')) || 15.00;
+        const existingItem = window.cartData.items.find(function(item) { return item.title === title; });
+
+        if (existingItem) {
+            existingItem.quantity++;
+        } else {
+            const artistEl = card.querySelector('.product-artist');
+            const thumbEl = card.querySelector('.product-thumb');
+            window.cartData.items.push({
+                id: Date.now(),
+                title: title,
+                artist: artistEl ? artistEl.textContent.trim() : 'Artista',
+                price: price,
+                quantity: 1,
+                image: thumbEl ? thumbEl.src : '',
+                url: button.getAttribute('data-url') || '#'
+            });
+        }
+        updateCartTotals();
+        saveCart();
+        updateCartUI();
+    };
+    
+    window.addToCartSingle = function(button) {
+        const container = button.closest('.product-single-container');
+        if (!container) return false;
+        const titleEl = container.querySelector('.product-info-area h1');
+        const priceEl = container.querySelector('.product-price-value');
+        if (!titleEl || !priceEl) return false;
+
+        const title = titleEl.textContent.trim().replace(/\s+/g, ' ');
+        const price = parseFloat(priceEl.getAttribute('data-price')) || 15.00;
+        const existingItem = window.cartData.items.find(function(item) { return item.title === title; });
+
+        if (!existingItem) {
+            const artistEl = container.querySelector('.product-artist');
+            const imageEl = container.querySelector('.product-main-image img');
+            window.cartData.items.push({
+                id: Date.now(),
+                title: title,
+                artist: artistEl ? artistEl.textContent.trim() : 'Artista',
+                price: price,
+                quantity: 1,
+                image: imageEl ? imageEl.src : '',
+                url: window.location.href
+            });
+        }
+        updateCartTotals();
+        saveCart();
+        updateCartUI();
+        return true;
+    };
+
+    window.removeFromCart = function(id) {
+        window.cartData.items = window.cartData.items.filter(function(item) { return item.id !== id; });
+        updateCartTotals();
+        saveCart();
+        updateCartUI();
+    };
+
+    window.updateQuantity = function(id, change) {
+        const item = window.cartData.items.find(function(item) { return item.id === id; });
+        if (!item) return;
+        item.quantity += change;
+        if (item.quantity <= 0) {
+            window.removeFromCart(id);
+        } else {
+            updateCartTotals();
+            saveCart();
+            updateCartUI();
+        }
+    };
+
+    window.toggleCart = function() {
+        const sidebar = document.getElementById('cartSidebar');
+        const overlay = document.getElementById('cartOverlay');
+        if (sidebar) sidebar.classList.toggle('active');
+        if (overlay) overlay.classList.toggle('active');
+    };
+
+    window.openCart = function() {
+        const cartSidebar = document.getElementById('cartSidebar');
+        const cartOverlay = document.getElementById('cartOverlay');
+        
+        if (cartSidebar && cartOverlay) {
+            cartSidebar.classList.add('active');
+            cartOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+    };
+
+    window.closeCart = function() {
+        const cartSidebar = document.getElementById('cartSidebar');
+        const cartOverlay = document.getElementById('cartOverlay');
+        
+        if (cartSidebar && cartOverlay) {
+            cartSidebar.classList.remove('active');
+            cartOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+    };
+
+    window.goToCheckout = function() {
+        if (window.cartData.items.length === 0) return alert('Seu carrinho está vazio!');
+        saveCart();
+        window.location.href = CONFIG.checkoutPageUrl;
+    };
+
+    window.buyNowAndCheckout = function() {
+        const btn = document.getElementById('addToCartBtn');
+        const success = window.addToCartSingle(btn);
+        if (success) {
+            window.goToCheckout();
+        } else {
+            alert('Ocorreu um erro ao adicionar o produto. Tente novamente.');
+        }
+    };
+
+    window.checkoutWhatsApp = function() {
+        if (window.cartData.items.length === 0) return alert('Seu carrinho está vazio!');
+        let msg = '🎵 Olá! Gostaria de encomendar os seguintes discos:\n\n';
+        window.cartData.items.forEach(function(item) {
+            msg += '*' + item.title + '*\n';
+            msg += 'Quantidade: ' + item.quantity + '\n';
+            msg += 'Preço: €' + (item.price * item.quantity).toFixed(2) + '\n\n';
+        });
+        msg += '*Total do Pedido: €' + window.cartData.total.toFixed(2) + '*';
+        const whatsappUrl = 'https://wa.me/' + CONFIG.whatsappNumber + '?text=' + encodeURIComponent(msg);
+        window.open(whatsappUrl, '_blank');
+    };
+
+    window.buyWhatsAppSingleProduct = function() {
+        const container = document.querySelector('.product-single-container');
+        if (!container) return;
+        const titleEl = container.querySelector('.product-info-area h1');
+        const priceEl = container.querySelector('.product-price-value');
+        if (!titleEl || !priceEl) return;
+        const title = titleEl.textContent.trim().replace(/\s+/g, ' ');
+        const price = priceEl.getAttribute('data-price') || 'N/A';
+        const productUrl = window.location.href;
+        let msg = '🎵 Olá! Tenho interesse em comprar este disco:\n\n*' + title + '*\nPreço: €' + price + '\n\nLink do produto: ' + productUrl;
+        const whatsappUrl = 'https://wa.me/' + CONFIG.whatsappNumber + '?text=' + encodeURIComponent(msg);
+        window.open(whatsappUrl, '_blank');
+    };
+
+    function initCart() {
+        loadCart();
+        updateCartUI();
+        syncWithSimpleCart();
+        
+        const cartOverlay = document.getElementById('cartOverlay');
+        if (cartOverlay) {
+            cartOverlay.addEventListener('click', closeCart);
+        }
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeCart();
+            }
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initCart);
+    } else {
+        initCart();
+    }
+})();
